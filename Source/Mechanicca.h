@@ -12,7 +12,6 @@
 #include <memory>
 
 /* Project specific inclusions */
-#include "OgreViewer/OgreViewer.h"
 #include "UserInterface/MainWindow.h"
 
 class Mechanicca
@@ -24,10 +23,7 @@ public:
 
 private:
 
-    std::shared_ptr<MainWindow>		mMainWindow;
-
-    std::shared_ptr<QWidget> 		mViewerWidget;
-
+    std::unique_ptr<MainWindow>		mMainWindow;
 };
 
 #endif /* SOURCE_MECHANICCA_H_ */
