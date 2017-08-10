@@ -50,7 +50,7 @@ protected:
 
 	void initialize( void );
 
-	void initializeQtWindow( void );
+	void initializeRenderWindow( void );
 
 	void initializeHlms( void );
 
@@ -70,6 +70,8 @@ protected:
 	bool event( QEvent * Event ) override;
 
 	void render( void );
+
+	void createSampleScene( void );
 
 private:
 	Ogre::Root *					mRoot;

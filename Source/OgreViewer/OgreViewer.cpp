@@ -18,6 +18,7 @@
 #include <OgreRoot.h>
 #include <OgreCamera.h>
 #include <OgreRenderWindow.h>
+#include <OgreItem.h>
 
 #include <OgreMatrix4.h>
 #include <OgreVector2.h>
@@ -65,6 +66,8 @@ OgreViewer::OgreViewer( const std::weak_ptr<QWidget> Parent )
 	this->installEventFilter( this );
 
 	this->initialize();
+
+	this->createSampleScene();
 }
 
 OgreViewer::~OgreViewer( void )
@@ -80,7 +83,7 @@ void OgreViewer::initialize( void )
 	/* Use plugins.cfg from OGRE installation */
 	this->mRoot = new Ogre::Root( Ogre::String( "/usr/local/share/OGRE/plugins.cfg" ) );
 
-	this->initializeQtWindow();
+	this->initializeRenderWindow();
 
 	/* TODO: Init overlay system here */
 
@@ -93,6 +96,7 @@ void OgreViewer::initialize( void )
 	/* TODO: Change hard coded path here */
 	/* TODO: All those paths shall be defined in resources.cfg file */
 	Ogre::ResourceGroupManager::getSingleton().addResourceLocation( "Data/Graphics/Compositors/", "FileSystem", "Popular" );
+	Ogre::ResourceGroupManager::getSingleton().addResourceLocation( "Data/Graphics/Models/", "FileSystem", "Essential" );
 
 	/* Coming from /usr/local/share/OGRE/resources2.cfg */
 	Ogre::ResourceGroupManager::getSingleton().addResourceLocation( "/usr/local/share/OGRE/Media/2.0/scripts/materials/Common", "FileSystem", "General" );
@@ -123,11 +127,13 @@ void OgreViewer::initialize( void )
 	this->mCamera->setFarClipDistance( 1000.0f );
 	this->mCamera->setAutoAspectRatio( true );
 
-	/* TODO: Setup Workspace */
-	this->mWorkspace = this->mRoot->getCompositorManager2()->addWorkspace( this->mSceneManager, this->mRenderWindow, this->mCamera, "ShadowMapDebuggingWorkspace", true );
+	/* Setup Workspace
+	 * The workspace uses the compositor defined in Mechanicca.compositor file
+	 */
+	this->mWorkspace = this->mRoot->getCompositorManager2()->addWorkspace( this->mSceneManager, this->mRenderWindow, this->mCamera, "Mechanicca", true );
 }
 
-void OgreViewer::initializeQtWindow( void )
+void OgreViewer::initializeRenderWindow( void )
 {
 	const Ogre::RenderSystemList & tRenderSystemList = this->mRoot->getAvailableRenderers();
 
@@ -169,9 +175,17 @@ void OgreViewer::initializeHlms( void )
 	Ogre::Archive * ArchivePbs = Ogre::ArchiveManager::getSingletonPtr()->load( "/usr/local/share/OGRE/Media/Hlms/Pbs/GLSL", "FileSystem", true );
 	Ogre::Archive * ArchiveUnlit = Ogre::ArchiveManager::getSingletonPtr()->load( "/usr/local/share/OGRE/Media/Hlms/Unlit/GLSL", "FileSystem", true );
 
+	Ogre::Archive * ArchiveLibraryAny = Ogre::ArchiveManager::getSingletonPtr()->load( "/usr/local/share/OGRE/Media/Hlms/Common/Any", "FileSystem", true );
+    Ogre::Archive * ArchivePbsLibraryAny = Ogre::ArchiveManager::getSingletonPtr()->load( "/usr/local/share/OGRE/Media/Hlms/Pbs/Any", "FileSystem", true );
+    Ogre::Archive * ArchiveUnlitLibraryAny = Ogre::ArchiveManager::getSingletonPtr()->load( "/usr/local/share/OGRE/Media/Hlms/Unlit/Any", "FileSystem", true );
+
 	Ogre::ArchiveVec library;
 
 	library.push_back( ArchiveLibrary );
+	library.push_back( ArchiveLibraryAny );
+	library.push_back( ArchivePbsLibraryAny );
+	library.push_back( ArchiveUnlitLibraryAny );
+
 
 	Ogre::HlmsPbs * hlmsPbs = OGRE_NEW Ogre::HlmsPbs( ArchivePbs, &library );
 	Ogre::HlmsUnlit * hlmsUnlit = OGRE_NEW Ogre::HlmsUnlit( ArchiveUnlit, &library );
@@ -238,4 +252,23 @@ void OgreViewer::render( void )
 		this->mUpdatePending = true;
 	    QApplication::postEvent( this, new QEvent( QEvent::UpdateRequest ) );
 	}
+}
+
+void OgreViewer::createSampleScene( void )
+{
+	/* Create light */
+	Ogre::Light * Light = this->mSceneManager->createLight();
+
+	Ogre::SceneNode * LightNode = this->mSceneManager->getRootSceneNode()->createChildSceneNode();
+	LightNode->attachObject( Light );
+	Light->setPowerScale( 1.0f );
+	Light->setType( Ogre::Light::LT_DIRECTIONAL );
+	Light->setDirection( Ogre::Vector3( 1.0f, -1.0f, -0.6f ).normalisedCopy() );
+
+	/* Create model to display */
+	Ogre::Item * Item = this->mSceneManager->createItem( "boostercube.mesh", Ogre::ResourceGroupManager::AUTODETECT_RESOURCE_GROUP_NAME, Ogre::SCENE_DYNAMIC );
+	Ogre::SceneNode * Node = this->mSceneManager->getRootSceneNode( Ogre::SCENE_DYNAMIC )->createChildSceneNode( Ogre::SCENE_DYNAMIC );
+	Node->setPosition( 0.0f, 0.0f, 0.0f );
+	Node->setScale( 1.0f, 1.0f, 1.0f );
+	Node->attachObject( Item );
 }
