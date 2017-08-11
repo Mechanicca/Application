@@ -37,6 +37,9 @@
 #include <Compositor/OgreCompositorWorkspace.h>
 #include <Compositor/OgreCompositorShadowNode.h>
 
+/* Project specific inclusions */
+#include "CameraControl.h"
+
 #include "OgreViewer.h"
 
 OgreViewer::OgreViewer( const std::weak_ptr<QWidget> Parent )
@@ -53,6 +56,7 @@ OgreViewer::OgreViewer( const std::weak_ptr<QWidget> Parent )
 		mWorkspace( NULL ),
 		mRenderWindow( NULL ),
 		mSceneManager( NULL ),
+		mCameraControl( NULL ),
 		mUpdatePending( false )
 {
 	if( !Parent.expired() )
@@ -66,6 +70,8 @@ OgreViewer::OgreViewer( const std::weak_ptr<QWidget> Parent )
 	this->installEventFilter( this );
 
 	this->initialize();
+
+	this->mCameraControl = new CameraControl( this->mCamera );
 
 	this->createSampleScene();
 }
@@ -194,6 +200,78 @@ void OgreViewer::initializeHlms( void )
 	Ogre::Root::getSingleton().getHlmsManager()->registerHlms( hlmsUnlit );
 }
 
+void OgreViewer::keyPressEvent( QKeyEvent * Event )
+{
+	if( this->mCameraControl )
+		this->mCameraControl->keyDownEvent( *Event );
+}
+
+void OgreViewer::keyReleaseEvent( QKeyEvent * Event )
+{
+	if( this->mCameraControl )
+		this->mCameraControl->keyUpEvent( *Event );
+}
+
+void OgreViewer::mousePressEvent( QMouseEvent * Event )
+{
+	if( this->mCameraControl )
+		this->mCameraControl->mouseDownEvent( *Event );
+}
+
+void OgreViewer::mouseReleaseEvent( QMouseEvent * Event )
+{
+	if( this->mCameraControl )
+		this->mCameraControl->mouseUpEvent( *Event );
+
+	/* NOTE: The code below implements the item selection using the mouse */
+
+	QPoint Position = Event->pos();
+
+	Ogre::Ray tMouseRay = this->mCamera->getCameraToViewportRay( (Ogre::Real)Position.x() / this->mRenderWindow->getWidth(), (Ogre::Real)Position.y() / this->mRenderWindow->getHeight()	);
+
+	Ogre::RaySceneQuery * tSceneQuery = this->mSceneManager->createRayQuery( tMouseRay );
+	tSceneQuery->setSortByDistance( true );
+
+	Ogre::RaySceneQueryResult tQueryResult = tSceneQuery->execute();
+
+	for( size_t ui = 0; ui < tQueryResult.size(); ui++ )
+	{
+		if( tQueryResult[ui].movable )
+		{
+			std::string tMovableType = tQueryResult[ui].movable->getMovableType();
+
+			if( tMovableType.compare( "Item" ) == 0 )
+			{
+				std::cout << "Entity selected." << std::endl;
+
+				/* TODO: Use static cast instead of explicit conversion */
+				emit entitySelected( ( Ogre::Item * ) tQueryResult[ui].movable );
+			}
+		}
+	}
+
+	this->mSceneManager->destroyQuery( tSceneQuery );
+}
+
+void OgreViewer::mouseMoveEvent( QMouseEvent * Event )
+{
+	static int lastX = Event->x();
+	static int lastY = Event->y();
+	int relX = Event->x() - lastX;
+	int relY = Event->y() - lastY;
+	lastX = Event->x();
+	lastY = Event->y();
+
+	if( this->mCameraControl && ( Event->buttons() & Qt::LeftButton) )
+		this->mCameraControl->mouseMoveEvent(relX, relY);
+}
+
+void OgreViewer::wheelEvent( QWheelEvent * Event )
+{
+	if( this->mCameraControl )
+		this->mCameraControl->wheelMoveEvent( *Event );
+}
+
 bool OgreViewer::eventFilter( QObject * Target, QEvent * Event )
 {
 	if( ( Target == this ) && ( Event->type() == QEvent::Resize ) && ( this->isExposed() ) && this->mRenderWindow != nullptr )
@@ -235,6 +313,14 @@ bool OgreViewer::event( QEvent * Event )
 	}
 }
 
+bool OgreViewer::frameRenderingQueued(const Ogre::FrameEvent & Event)
+{
+	if( this->mCameraControl )
+		this->mCameraControl->frameRenderingQueued( Event );
+
+	return( true );
+}
+
 void OgreViewer::render( void )
 {
 	/* Do nothing if the window is invisible */
@@ -271,4 +357,6 @@ void OgreViewer::createSampleScene( void )
 	Node->setPosition( 0.0f, 0.0f, 0.0f );
 	Node->setScale( 1.0f, 1.0f, 1.0f );
 	Node->attachObject( Item );
+
+	this->mCameraControl->setTarget( Node );
 }

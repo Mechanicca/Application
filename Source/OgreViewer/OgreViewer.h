@@ -26,6 +26,7 @@ namespace Ogre
 	class CompositorWorkspace;
 }
 class QWidget;
+class CameraControl;
 
 class OgreViewer
 	:	/* OgreViewer inherits from Qt5 QWindow */
@@ -46,6 +47,12 @@ public slots:
 	 */
 	bool eventFilter( QObject * Target, QEvent * Event ) override;
 
+signals:
+	/**
+	 * @brief exposeEvent (overrides QObject::eventFilter via QWindow)
+	 */
+	void entitySelected( Ogre::Item * Item );
+
 protected:
 
 	void initialize( void );
@@ -54,10 +61,17 @@ protected:
 
 	void initializeHlms( void );
 
+	virtual void keyPressEvent( QKeyEvent * Event ) override;
+	virtual void keyReleaseEvent( QKeyEvent * Event ) override;
+	virtual void mousePressEvent( QMouseEvent * Event ) override;
+	virtual void mouseReleaseEvent( QMouseEvent * Event ) override;
+	virtual void mouseMoveEvent( QMouseEvent * Event ) override;
+	virtual void wheelEvent( QWheelEvent * Event ) override;
+
 	/**
 	 * @brief exposeEvent (overrides QWindow::exposeEvent via Ogre::FrameListener)
 	 */
-	void exposeEvent( QExposeEvent * Event ) override;
+	virtual void exposeEvent( QExposeEvent * Event ) override;
 
 	/**
 	 * @brief event (overrides QWindow::event)
@@ -67,7 +81,13 @@ protected:
 	 * actually process the keyboard/other events of Qt and the
 	 * underlying OS.
 	 */
-	bool event( QEvent * Event ) override;
+	virtual bool event( QEvent * Event ) override;
+
+	/**
+	 * @brief frameRenderingQueued (Overrides Ogre::FrameListener::frameRenderingQueued via Ogre::FrameListener)
+	 */
+
+	bool frameRenderingQueued(const Ogre::FrameEvent & Event);
 
 	void render( void );
 
@@ -80,6 +100,8 @@ private:
 	Ogre::RenderWindow *			mRenderWindow;
 
 	Ogre::SceneManager *			mSceneManager;
+
+	CameraControl * 				mCameraControl;
 
 	bool mUpdatePending;
 };

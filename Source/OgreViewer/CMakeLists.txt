@@ -8,6 +8,8 @@ target_sources( ${PROJECT_NAME}
         "${CMAKE_CURRENT_LIST_DIR}/OgreViewer.h"
     PRIVATE
         "${CMAKE_CURRENT_LIST_DIR}/OgreViewer.cpp"
+        "${CMAKE_CURRENT_LIST_DIR}/CameraControl.h"
+        "${CMAKE_CURRENT_LIST_DIR}/CameraControl.cpp"
 )
 
 target_link_libraries( ${PROJECT_NAME} 
