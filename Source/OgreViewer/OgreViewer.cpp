@@ -19,6 +19,7 @@
 #include <OgreCamera.h>
 #include <OgreRenderWindow.h>
 #include <OgreItem.h>
+#include <OgreConfigFile.h>
 
 #include <OgreMatrix4.h>
 #include <OgreVector2.h>
@@ -52,10 +53,10 @@ OgreViewer::OgreViewer( const std::weak_ptr<QWidget> Parent )
 	:	QWindow(),
 #endif
 		mRoot( NULL ),
-		mCamera( NULL ),
-		mWorkspace( NULL ),
 		mRenderWindow( NULL ),
 		mSceneManager( NULL ),
+		mCamera( NULL ),
+		mWorkspace( NULL ),
 		mCameraControl( NULL ),
 		mUpdatePending( false )
 {
@@ -69,7 +70,26 @@ OgreViewer::OgreViewer( const std::weak_ptr<QWidget> Parent )
 
 	this->installEventFilter( this );
 
-	this->initialize();
+	/* Create Ogre root */
+	this->mRoot = createRoot( "Data/Graphics/plugins.cfg" );
+
+	this->mRenderWindow = createRenderWindow( this->mRoot, QSize( this->width(), this->height() ), this->winId() );
+
+	/* TODO: Init overlay system here */
+
+	/* Create Scene manager */
+	this->mSceneManager = createSceneManager( this->mRoot );
+
+	/* Create Camera */
+	this->mCamera = createCamera( this->mSceneManager );
+
+	/* Initialize High Level Material System */
+	this->initializeHlms();
+
+	this->configureResources( "Data/Graphics/resources.cfg" );
+
+	/* Setup Workspace */
+	this->mWorkspace = createCompositorWorkspace( this->mRoot, this->mSceneManager, this->mRenderWindow, this->mCamera );
 
 	this->mCameraControl = new CameraControl( this->mCamera );
 
@@ -81,77 +101,24 @@ OgreViewer::~OgreViewer( void )
 	delete this->mRoot;
 }
 
-/* TODO: Move the whole method body directly to the constructor? */
-void OgreViewer::initialize( void )
+Ogre::Root * OgreViewer::createRoot( const Ogre::String PluginConfigFileName )
 {
 	/* TODO: Handle plugins.cfg file better way -> check for existence etc. */
-
-	/* Use plugins.cfg from OGRE installation */
-	this->mRoot = new Ogre::Root( Ogre::String( "/usr/local/share/OGRE/plugins.cfg" ) );
-
-	this->initializeRenderWindow();
-
-	/* TODO: Init overlay system here */
-
-	/* TODO: Manage resource.cfg file here */
-
-	/* Initialize High Level Material System */
-	this->initializeHlms();
-
-	/* Compositors resource location */
-	/* TODO: Change hard coded path here */
-	/* TODO: All those paths shall be defined in resources.cfg file */
-	Ogre::ResourceGroupManager::getSingleton().addResourceLocation( "Data/Graphics/Compositors/", "FileSystem", "Popular" );
-	Ogre::ResourceGroupManager::getSingleton().addResourceLocation( "Data/Graphics/Models/", "FileSystem", "Essential" );
-
-	/* Coming from /usr/local/share/OGRE/resources2.cfg */
-	Ogre::ResourceGroupManager::getSingleton().addResourceLocation( "/usr/local/share/OGRE/Media/2.0/scripts/materials/Common", "FileSystem", "General" );
-	Ogre::ResourceGroupManager::getSingleton().addResourceLocation( "/usr/local/share/OGRE/Media/2.0/scripts/materials/Common/GLSL", "FileSystem", "General" );
-	Ogre::ResourceGroupManager::getSingleton().addResourceLocation( "/usr/local/share/OGRE/Media/2.0/scripts/materials/Common/HLSL", "FileSystem", "General" );
-	Ogre::ResourceGroupManager::getSingleton().addResourceLocation( "/usr/local/share/OGRE/Media/2.0/scripts/materials/Common/Metal", "FileSystem", "General" );
-
-	/* TODO: 'true' reason is not known */
-	Ogre::ResourceGroupManager::getSingleton().initialiseAllResourceGroups( true );
-
-	/* TODO: Create Scene manager */
-	/* TODO: Change the number of threads handling ( currently it is '1') */
-	this->mSceneManager = mRoot->createSceneManager( Ogre::ST_GENERIC, 1, Ogre::INSTANCING_CULLING_SINGLETHREAD, "Mechanicca" );
-
-	/* TODO: Enable once the overlay system is available */
-#if false
-	this->mSceneManager->addRenderQueueListener( mOverlaySystem );
-#endif
-
-	this->mSceneManager->setShadowDirectionalLightExtrusionDistance( 500.0f );
-	this->mSceneManager->setShadowFarDistance( 500.0f );
-
-	/* TODO: Create Camera */
-	this->mCamera = this->mSceneManager->createCamera( "Main Camera" );
-	this->mCamera->setPosition( Ogre::Vector3( 0, 5, 15 ) );
-	this->mCamera->lookAt( Ogre::Vector3( 0, 0, 0 ) );
-	this->mCamera->setNearClipDistance( 0.2f );
-	this->mCamera->setFarClipDistance( 1000.0f );
-	this->mCamera->setAutoAspectRatio( true );
-
-	/* Setup Workspace
-	 * The workspace uses the compositor defined in Mechanicca.compositor file
-	 */
-	this->mWorkspace = this->mRoot->getCompositorManager2()->addWorkspace( this->mSceneManager, this->mRenderWindow, this->mCamera, "Mechanicca", true );
+	return( new Ogre::Root( PluginConfigFileName ) );
 }
 
-void OgreViewer::initializeRenderWindow( void )
+Ogre::RenderWindow * OgreViewer::createRenderWindow( Ogre::Root * Root, QSize Dimensions, WId WinID )
 {
-	const Ogre::RenderSystemList & tRenderSystemList = this->mRoot->getAvailableRenderers();
+	const Ogre::RenderSystemList & tRenderSystemList = Root->getAvailableRenderers();
 
 	Ogre::RenderSystem * tRenderSystem = tRenderSystemList[0];
 
 	/* Setting size and VSync on windows will solve a lot of problems */
-	QString dimensions = QString( "%1 x %2" ).arg( this->width() ).arg( this->height() );
-	tRenderSystem->setConfigOption( "Video Mode", dimensions.toStdString() );
+	tRenderSystem->setConfigOption( "Video Mode", QString( "%1 x %2" ).arg( Dimensions.width() ).arg( Dimensions.height() ).toStdString() );
 	tRenderSystem->setConfigOption( "Full Screen", "No" );
 	tRenderSystem->setConfigOption( "VSync", "Yes" );
-	mRoot->setRenderSystem( tRenderSystem );
-	mRoot->initialise(false);
+	Root->setRenderSystem( tRenderSystem );
+	Root->initialise(false);
 
 	Ogre::NameValuePairList tParameters;
 
@@ -164,13 +131,46 @@ void OgreViewer::initializeRenderWindow( void )
 	   cross-platform method on how to do this. If you set both options
 	   (externalWindowHandle and parentWindowHandle) this code will work
 	   with OpenGL and DirectX. */
-	tParameters["externalWindowHandle"] = Ogre::StringConverter::toString( (unsigned long)( this->winId() ) );
-	tParameters["parentWindowHandle"] =	Ogre::StringConverter::toString( (unsigned long)( this->winId() ) );
+	tParameters["externalWindowHandle"] = Ogre::StringConverter::toString( (unsigned long)( WinID ) );
+	tParameters["parentWindowHandle"] =	Ogre::StringConverter::toString( (unsigned long)( WinID ) );
 
 	/* FIXME: unsure but has an effect on background. */
 	tParameters.insert( std::make_pair("gamma", "true") );
 
-	this->mRenderWindow = mRoot->createRenderWindow("QT Window", this->width(), this->height(), false, &tParameters );
+	return( Root->createRenderWindow("QT Window", Dimensions.width(), Dimensions.height(), false, &tParameters ) );
+}
+
+Ogre::SceneManager * OgreViewer::createSceneManager( Ogre::Root * Root )
+{
+	Ogre::SceneManager * tSceneManager = Root->createSceneManager( Ogre::ST_GENERIC, 1, Ogre::INSTANCING_CULLING_SINGLETHREAD, "Mechanicca" );
+	/* TODO: Rework hard-coded values */
+	tSceneManager->setShadowDirectionalLightExtrusionDistance( 500.0f );
+	tSceneManager->setShadowFarDistance( 500.0f );
+
+	/* TODO: Enable once the overlay system is available */
+#if false
+	tSceneManager->addRenderQueueListener( OverlaySystem );
+#endif
+
+	return( tSceneManager );
+}
+
+Ogre::Camera * OgreViewer::createCamera( Ogre::SceneManager * SceneManager )
+{
+	Ogre::Camera * tCamera = SceneManager->createCamera( "Main Camera" );
+	tCamera->setPosition( Ogre::Vector3( 0, 5, 15 ) );
+	tCamera->lookAt( Ogre::Vector3( 0, 0, 0 ) );
+	tCamera->setNearClipDistance( 0.2f );
+	tCamera->setFarClipDistance( 1000.0f );
+	tCamera->setAutoAspectRatio( true );
+
+	return( tCamera );
+}
+
+Ogre::CompositorWorkspace * OgreViewer::createCompositorWorkspace( Ogre::Root * Root, Ogre::SceneManager * SceneManager, Ogre::RenderWindow * RenderWindow, Ogre::Camera * Camera )
+{
+	/* The workspace uses the compositor defined in Mechanicca.compositor file */
+	return( Root->getCompositorManager2()->addWorkspace( SceneManager, RenderWindow, Camera, "Mechanicca", true ) );
 }
 
 void OgreViewer::initializeHlms( void )
@@ -198,6 +198,33 @@ void OgreViewer::initializeHlms( void )
 
 	Ogre::Root::getSingleton().getHlmsManager()->registerHlms( hlmsPbs );
 	Ogre::Root::getSingleton().getHlmsManager()->registerHlms( hlmsUnlit );
+}
+
+void OgreViewer::configureResources( const Ogre::String ResourcesFileName ) const
+{
+	Ogre::ConfigFile tResourcesConfigFile;
+
+	tResourcesConfigFile.load( ResourcesFileName );
+
+	Ogre::ConfigFile::SectionIterator tSectionIterator = tResourcesConfigFile.getSectionIterator();
+	Ogre::String tSectionName, tTypeName, tArchiveName;
+
+	while( tSectionIterator.hasMoreElements() )
+	{
+		tSectionName = tSectionIterator.peekNextKey();
+
+		Ogre::ConfigFile::SettingsMultiMap * tSettings = tSectionIterator.getNext();
+		Ogre::ConfigFile::SettingsMultiMap::iterator i;
+		for (i = tSettings->begin(); i != tSettings->end(); ++i)
+		{
+			tTypeName = i->first;
+			tArchiveName = i->second;
+			Ogre::ResourceGroupManager::getSingleton().addResourceLocation( tArchiveName, tTypeName, tSectionName );
+		}
+	}
+
+	/* TODO: 'true' reason is not known */
+	Ogre::ResourceGroupManager::getSingleton().initialiseAllResourceGroups( true );
 }
 
 void OgreViewer::keyPressEvent( QKeyEvent * Event )

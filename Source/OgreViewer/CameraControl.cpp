@@ -17,7 +17,7 @@
 #include "CameraControl.h"
 
 CameraControl::CameraControl( Ogre::Camera * Camera )
-	:	mCamera( NULL ),
+	:	mCamera( Camera ),
 		mStyle( CameraStyle::ORBIT ),
 		mTarget( NULL ),
 		mTopSpeed( 150 ),
@@ -31,11 +31,7 @@ CameraControl::CameraControl( Ogre::Camera * Camera )
 		mGoingUp( false ),
 		mGoingDown( false ),
 		mFastMove( false )
-{
-	this->mCamera = Camera;
-
-	std::cout << "---------------------------------------------------------------------> Camera control constructed. Camera: " << this->mCamera << std::endl;
-}
+{}
 
 void CameraControl::setTarget( Ogre::SceneNode * Target )
 {
@@ -46,7 +42,7 @@ void CameraControl::setTarget( Ogre::SceneNode * Target )
 		if( Target != NULL )
 		{
 			/* TODO: Replace hard coded values here. */
-			this->setYawPitchDistance( Ogre::Degree( 0 ), Ogre::Degree( 15 ), 150 );
+			this->setYawPitchDistance( Ogre::Degree( 0 ), Ogre::Degree( 15 ), 15 );
 			this->mCamera->setAutoTracking( true, this->mTarget );
 		}
 		else
@@ -79,7 +75,7 @@ void CameraControl::setStyle( CameraStyle Style )
 		this->mCamera->setFixedYawAxis( true );
 		this->manualStop();
 		/* TODO: Replace hard coded values here. */
-		this->setYawPitchDistance( Ogre::Degree( 0 ), Ogre::Degree( 15 ), 150 );
+		this->setYawPitchDistance( Ogre::Degree( 0 ), Ogre::Degree( 15 ), 15 );
 	}
 	else if( ( this->mStyle != CameraStyle::FREELOOK ) && ( Style == CameraStyle::FREELOOK ) )
 	{

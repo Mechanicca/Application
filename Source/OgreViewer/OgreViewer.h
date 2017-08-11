@@ -55,17 +55,30 @@ signals:
 
 protected:
 
-	void initialize( void );
+	static Ogre::Root * createRoot( const Ogre::String PluginConfigFileName );
 
-	void initializeRenderWindow( void );
+	static Ogre::RenderWindow * createRenderWindow( Ogre::Root * Root, QSize Dimensions, WId WinID );
+
+	static Ogre::SceneManager * createSceneManager( Ogre::Root * Root );
+
+	static Ogre::Camera * createCamera( Ogre::SceneManager * SceneManager );
+
+	static Ogre::CompositorWorkspace * createCompositorWorkspace( Ogre::Root * Root, Ogre::SceneManager * SceneManager, Ogre::RenderWindow * RenderWindow, Ogre::Camera * Camera );
 
 	void initializeHlms( void );
 
+	void configureResources( const Ogre::String FileName ) const;
+
 	virtual void keyPressEvent( QKeyEvent * Event ) override;
+
 	virtual void keyReleaseEvent( QKeyEvent * Event ) override;
+
 	virtual void mousePressEvent( QMouseEvent * Event ) override;
+
 	virtual void mouseReleaseEvent( QMouseEvent * Event ) override;
+
 	virtual void mouseMoveEvent( QMouseEvent * Event ) override;
+
 	virtual void wheelEvent( QWheelEvent * Event ) override;
 
 	/**
@@ -95,11 +108,10 @@ protected:
 
 private:
 	Ogre::Root *					mRoot;
+	Ogre::RenderWindow *			mRenderWindow;
+	Ogre::SceneManager *			mSceneManager;
 	Ogre::Camera *					mCamera;
 	Ogre::CompositorWorkspace *		mWorkspace;
-	Ogre::RenderWindow *			mRenderWindow;
-
-	Ogre::SceneManager *			mSceneManager;
 
 	CameraControl * 				mCameraControl;
 
