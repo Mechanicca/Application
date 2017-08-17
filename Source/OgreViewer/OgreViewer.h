@@ -8,6 +8,9 @@
 #ifndef OGREVIEWER_OGREVIEWER_H_
 #define OGREVIEWER_OGREVIEWER_H_
 
+#define CAMERA_CONTROL_INTEGRATED	true
+#define DEBUG_CONSOLE_OUTPUT		true
+
 /* Standard library inclusions */
 #include <memory>
 
@@ -16,6 +19,9 @@
 
 /* Ogre3D inclusions */
 #include <OgreFrameListener.h>
+
+/* Project specific inclusions */
+#include "CameraControlProfile.h"
 
 /* Forward declarations */
 namespace Ogre
@@ -26,7 +32,6 @@ namespace Ogre
 	class CompositorWorkspace;
 }
 class QWidget;
-class CameraControl;
 
 class OgreViewer
 	:	/* OgreViewer inherits from Qt5 QWindow */
@@ -96,24 +101,40 @@ protected:
 	 */
 	virtual bool event( QEvent * Event ) override;
 
+	void setTarget( Ogre::SceneNode * Target );
+
+	void setCameraYawPitchDistance( Ogre::Radian Yaw, Ogre::Radian Pitch, Ogre::Real Distance );
+
+	void selection( QMouseEvent * Event );
+
+	void cameraOrbit( const int RelX, const int RelY );
+
+	void cameraFreelook( const int RelX, const int RelY );
+
+	void cameraZoom( const int RelZ );
+
 	/**
 	 * @brief frameRenderingQueued (Overrides Ogre::FrameListener::frameRenderingQueued via Ogre::FrameListener)
 	 */
 
-	bool frameRenderingQueued(const Ogre::FrameEvent & Event);
+	bool frameRenderingQueued( const Ogre::FrameEvent & Event );
 
 	void render( void );
 
 	void createSampleScene( void );
 
 private:
+	void setCameraAction( CameraAction Action );
+
 	Ogre::Root *					mRoot;
 	Ogre::RenderWindow *			mRenderWindow;
 	Ogre::SceneManager *			mSceneManager;
 	Ogre::Camera *					mCamera;
 	Ogre::CompositorWorkspace *		mWorkspace;
 
-	CameraControl * 				mCameraControl;
+	CameraAction					mCameraAction;
+	CameraControlProfile * 			mCameraControlProfile;
+	Ogre::SceneNode * 				mTarget;
 
 	bool mUpdatePending;
 };

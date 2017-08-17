@@ -39,8 +39,6 @@
 #include <Compositor/OgreCompositorShadowNode.h>
 
 /* Project specific inclusions */
-#include "CameraControl.h"
-
 #include "OgreViewer.h"
 
 OgreViewer::OgreViewer( const std::weak_ptr<QWidget> Parent )
@@ -57,7 +55,11 @@ OgreViewer::OgreViewer( const std::weak_ptr<QWidget> Parent )
 		mSceneManager( NULL ),
 		mCamera( NULL ),
 		mWorkspace( NULL ),
-		mCameraControl( NULL ),
+		/* Default camera action is to do nothing */
+		mCameraAction( CameraAction::NOTHING ),
+		/* Create camera control profile to implement camera action to mouse buttons and its modifiers mapping */
+		mCameraControlProfile( new CADNavigationProfile() ),
+		mTarget( NULL ),
 		mUpdatePending( false )
 {
 	if( !Parent.expired() )
@@ -83,6 +85,9 @@ OgreViewer::OgreViewer( const std::weak_ptr<QWidget> Parent )
 	/* Create Camera */
 	this->mCamera = createCamera( this->mSceneManager );
 
+	/* Setup viewer target */
+	this->setTarget( this->mSceneManager->getRootSceneNode() );
+
 	/* Initialize High Level Material System */
 	this->initializeHlms();
 
@@ -90,8 +95,6 @@ OgreViewer::OgreViewer( const std::weak_ptr<QWidget> Parent )
 
 	/* Setup Workspace */
 	this->mWorkspace = createCompositorWorkspace( this->mRoot, this->mSceneManager, this->mRenderWindow, this->mCamera );
-
-	this->mCameraControl = new CameraControl( this->mCamera );
 
 	this->createSampleScene();
 }
@@ -227,57 +230,67 @@ void OgreViewer::configureResources( const Ogre::String ResourcesFileName ) cons
 	Ogre::ResourceGroupManager::getSingleton().initialiseAllResourceGroups( true );
 }
 
+void OgreViewer::setCameraAction( CameraAction Action )
+{
+	/* Set the camera specific to requested Action */
+	if( ( this->mCameraAction != CameraAction::ORBIT ) && ( Action == CameraAction::ORBIT ) )
+	{
+		this->setTarget( ( this->mTarget ) ? this->mTarget : this->mCamera->getSceneManager()->getRootSceneNode() );
+		this->mCamera->setFixedYawAxis( true );
+	}
+	else if( ( this->mCameraAction != CameraAction::FREELOOK ) && ( Action == CameraAction::FREELOOK ) )
+	{
+		this->mCamera->setAutoTracking( false );
+		this->mCamera->setFixedYawAxis( true );
+	}
+
+	/* Finally, select the camera action */
+	this->mCameraAction = Action;
+}
+
 void OgreViewer::keyPressEvent( QKeyEvent * Event )
 {
-	if( this->mCameraControl )
-		this->mCameraControl->keyDownEvent( *Event );
+
 }
 
 void OgreViewer::keyReleaseEvent( QKeyEvent * Event )
 {
-	if( this->mCameraControl )
-		this->mCameraControl->keyUpEvent( *Event );
+
 }
 
 void OgreViewer::mousePressEvent( QMouseEvent * Event )
 {
-	if( this->mCameraControl )
-		this->mCameraControl->mouseDownEvent( *Event );
+	/* If current button state and keyboard modifiers fits to any action, select it */
+	this->setCameraAction( this->mCameraControlProfile->getAction( Event->buttons(), Event->modifiers() ) );
+
+	/* TODO: Remove, temporary debug prints */
+#if DEBUG_CONSOLE_OUTPUT
+	switch( this->mCameraAction )
+	{
+		case CameraAction::NOTHING : std::cout << "CameraAction = NOTHING" << std::endl; break;
+		case CameraAction::SELECTION : std::cout << "CameraAction = SELECTION" << std::endl; break;
+		case CameraAction::FREELOOK : std::cout << "CameraAction = FREELOOK" << std::endl; break;
+		case CameraAction::ORBIT : std::cout << "CameraAction = ORBIT" << std::endl; break;
+		case CameraAction::PANNING : std::cout << "CameraAction = PANNING" << std::endl; break;
+		case CameraAction::ZOOM : std::cout << "CameraAction = ZOOM" << std::endl; break;
+	}
+#endif
 }
 
 void OgreViewer::mouseReleaseEvent( QMouseEvent * Event )
 {
-	if( this->mCameraControl )
-		this->mCameraControl->mouseUpEvent( *Event );
-
-	/* NOTE: The code below implements the item selection using the mouse */
-
-	QPoint Position = Event->pos();
-
-	Ogre::Ray tMouseRay = this->mCamera->getCameraToViewportRay( (Ogre::Real)Position.x() / this->mRenderWindow->getWidth(), (Ogre::Real)Position.y() / this->mRenderWindow->getHeight()	);
-
-	Ogre::RaySceneQuery * tSceneQuery = this->mSceneManager->createRayQuery( tMouseRay );
-	tSceneQuery->setSortByDistance( true );
-
-	Ogre::RaySceneQueryResult tQueryResult = tSceneQuery->execute();
-
-	for( size_t ui = 0; ui < tQueryResult.size(); ui++ )
+	/* Once the selection action button / modifiers combination is released, perform the selection itself */
+	if( this->mCameraAction == CameraAction::SELECTION )
 	{
-		if( tQueryResult[ui].movable )
-		{
-			std::string tMovableType = tQueryResult[ui].movable->getMovableType();
-
-			if( tMovableType.compare( "Item" ) == 0 )
-			{
-				std::cout << "Entity selected." << std::endl;
-
-				/* TODO: Use static cast instead of explicit conversion */
-				emit entitySelected( ( Ogre::Item * ) tQueryResult[ui].movable );
-			}
-		}
+		this->selection( Event );
 	}
 
-	this->mSceneManager->destroyQuery( tSceneQuery );
+	/* Once the mouse buttons are released, the camera should not perform any action */
+	this->mCameraAction = CameraAction::NOTHING;
+
+#if DEBUG_CONSOLE_OUTPUT
+		std::cout << "CameraAction = NOTHING" << std::endl;
+#endif
 }
 
 void OgreViewer::mouseMoveEvent( QMouseEvent * Event )
@@ -289,14 +302,19 @@ void OgreViewer::mouseMoveEvent( QMouseEvent * Event )
 	lastX = Event->x();
 	lastY = Event->y();
 
-	if( this->mCameraControl && ( Event->buttons() & Qt::LeftButton) )
-		this->mCameraControl->mouseMoveEvent(relX, relY);
+	switch( this->mCameraAction )
+	{
+		case CameraAction::ORBIT : 		this->cameraOrbit( relX, relY ); break;
+		case CameraAction::FREELOOK : 	this->cameraFreelook( relX, relY ); break;
+		case CameraAction::ZOOM :		this->cameraZoom( - relY ); break;
+		default : break;
+	}
 }
 
+/* TODO: Make the wheelEvent configurable as well. It must not serve for zooming only */
 void OgreViewer::wheelEvent( QWheelEvent * Event )
 {
-	if( this->mCameraControl )
-		this->mCameraControl->wheelMoveEvent( *Event );
+	this->cameraZoom( Event->delta() );
 }
 
 bool OgreViewer::eventFilter( QObject * Target, QEvent * Event )
@@ -340,10 +358,143 @@ bool OgreViewer::event( QEvent * Event )
 	}
 }
 
+void OgreViewer::setTarget( Ogre::SceneNode * Target )
+{
+	if( Target != this->mTarget )
+	{
+		this->mTarget = Target;
+
+		if( Target != NULL )
+		{
+			/* TODO: Replace hard coded values here. */
+			this->setCameraYawPitchDistance( Ogre::Degree( 0 ), Ogre::Degree( 15 ), 15 );
+			this->mCamera->setAutoTracking( true, this->mTarget );
+		}
+		else
+		{
+			this->mCamera->setAutoTracking( false );
+		}
+	}
+}
+
+void OgreViewer::setCameraYawPitchDistance( Ogre::Radian Yaw, Ogre::Radian Pitch, Ogre::Real Distance )
+{
+	this->mCamera->setPosition( this->mTarget->_getDerivedPosition() );
+	this->mCamera->setOrientation( this->mTarget->_getDerivedOrientation() );
+	this->mCamera->yaw( Yaw );
+	this->mCamera->pitch( - Pitch );
+	this->mCamera->moveRelative( Ogre::Vector3( 0, 0, Distance ) );
+}
+
+void OgreViewer::selection( QMouseEvent * Event )
+{
+	QPoint Position = Event->pos();
+
+	Ogre::Ray tMouseRay = this->mCamera->getCameraToViewportRay( (Ogre::Real)Position.x() / this->mRenderWindow->getWidth(), (Ogre::Real)Position.y() / this->mRenderWindow->getHeight()	);
+
+	Ogre::RaySceneQuery * tSceneQuery = this->mSceneManager->createRayQuery( tMouseRay );
+	tSceneQuery->setSortByDistance( true );
+
+	Ogre::RaySceneQueryResult tQueryResult = tSceneQuery->execute();
+
+	for( size_t ui = 0; ui < tQueryResult.size(); ui++ )
+	{
+		if( tQueryResult[ui].movable )
+		{
+			std::string tMovableType = tQueryResult[ui].movable->getMovableType();
+
+			if( tMovableType.compare( "Item" ) == 0 )
+			{
+				std::cout << "Entity selected." << std::endl;
+
+				/* TODO: Use static cast instead of explicit conversion */
+				emit entitySelected( ( Ogre::Item * ) tQueryResult[ui].movable );
+			}
+		}
+	}
+
+	this->mSceneManager->destroyQuery( tSceneQuery );
+}
+
+void OgreViewer::cameraOrbit( const int RelX, const int RelY )
+{
+	Ogre::Real tDistance = ( this->mCamera->getPosition() - this->mTarget->_getDerivedPosition() ).length();
+
+	this->mCamera->setPosition( this->mTarget->_getDerivedPosition() );
+	/* TODO: Rework hard-coded values */
+	this->mCamera->yaw( Ogre::Degree( -RelX * 0.25f ) );
+	this->mCamera->pitch( Ogre::Degree( -RelY * 0.25f ) );
+	this->mCamera->moveRelative( Ogre::Vector3( 0, 0, tDistance ) );
+}
+
+void OgreViewer::cameraFreelook( const int RelX, const int RelY )
+{
+	/* TODO: Rework hard-coded values */
+	this->mCamera->yaw( Ogre::Degree( -RelX * 0.15f ) );
+	this->mCamera->pitch( Ogre::Degree( -RelY * 0.15f ) );
+}
+
+void OgreViewer::cameraZoom( const int RelZ )
+{
+	Ogre::Real tDistance = ( this->mCamera->getPosition() - this->mTarget->_getDerivedPosition() ).length();
+
+	if( RelZ != 0 )  // move the camera toward or away from the target
+	{
+		// the further the camera is, the faster it moves
+		/* TODO: Rework hard-coded values */
+		mCamera->moveRelative( Ogre::Vector3( 0, 0, -RelZ * 0.0008f * tDistance ) );
+	}
+}
+
 bool OgreViewer::frameRenderingQueued(const Ogre::FrameEvent & Event)
 {
-	if( this->mCameraControl )
-		this->mCameraControl->frameRenderingQueued( Event );
+#if false
+	if( this->mStyle == CameraStyle::FREELOOK )
+	{
+		Ogre::Vector3 tAcceleration = Ogre::Vector3::ZERO;
+		if( this->mGoingForward )	tAcceleration += mCamera->getDirection();
+		if( this->mGoingBack ) 		tAcceleration -= mCamera->getDirection();
+		if( this->mGoingRight ) 	tAcceleration += mCamera->getRight();
+		if( this->mGoingLeft ) 		tAcceleration -= mCamera->getRight();
+		if( this->mGoingUp ) 		tAcceleration += mCamera->getUp();
+		if( this->mGoingDown ) 		tAcceleration -= mCamera->getUp();
+
+		/* TODO: Rework hard coded value */
+		Ogre::Real tTopSpeed = this->mFastMove ? this->mTopSpeed * 20 : this->mTopSpeed;
+
+		if( tAcceleration.squaredLength() != 0 )
+		{
+			tAcceleration.normalise();
+			/* TODO: Rework hard coded value */
+			this->mVelocity += tAcceleration * tTopSpeed * Event.timeSinceLastFrame * 10;
+		}
+		else
+		{
+			/* TODO: Rework hard coded value */
+			this->mVelocity -= this->mVelocity * Event.timeSinceLastFrame * 10;
+		}
+
+		Ogre::Real tTooSmall = std::numeric_limits<Ogre::Real>::epsilon();
+
+		/* Keep camera velocity below top speed and above epsilon */
+		if( this->mVelocity.squaredLength() > std::pow( tTopSpeed, 2 ) )
+		{
+			this->mVelocity.normalise();
+			this->mVelocity *= tTopSpeed;
+		}
+		else if( this->mVelocity.squaredLength() < std::pow( tTooSmall, 2 ) )
+		{
+			this->mVelocity = Ogre::Vector3::ZERO;
+		}
+
+		if( this->mVelocity != Ogre::Vector3::ZERO )
+		{
+			this->mCamera->move( mVelocity * Event.timeSinceLastFrame );
+		}
+	}
+
+	return( true );
+#endif
 
 	return( true );
 }
@@ -384,6 +535,4 @@ void OgreViewer::createSampleScene( void )
 	Node->setPosition( 0.0f, 0.0f, 0.0f );
 	Node->setScale( 1.0f, 1.0f, 1.0f );
 	Node->attachObject( Item );
-
-	this->mCameraControl->setTarget( Node );
 }
