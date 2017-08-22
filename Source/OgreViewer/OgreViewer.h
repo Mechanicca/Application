@@ -133,6 +133,7 @@ private:
 	Ogre::CompositorWorkspace *		mWorkspace;
 
 	CameraAction					mCameraAction;
+	CameraControlsState	*			mCurrentCameraControlsState;
 	CameraControlProfile * 			mCameraControlProfile;
 	Ogre::SceneNode * 				mTarget;
 

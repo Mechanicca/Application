@@ -8,6 +8,9 @@
 #ifndef OGREVIEWER_CAMERACONTROLPROFILE_H_
 #define OGREVIEWER_CAMERACONTROLPROFILE_H_
 
+/* Standard library inclusions */
+#include <iostream>
+
 /* Qt5 inclusions */
 #include <QMouseEvent>
 
@@ -24,59 +27,102 @@ enum class CameraAction : unsigned short
 	ZOOM
 };
 
-/* TODO: Becomes obsolete, remove */
-enum class ButtonKeyEventType : unsigned short
-{
-	PRESSED,
-	RELEASED
-};
 
-class CameraActionProfileItem
+class CameraControlsState
 {
 public:
-	CameraActionProfileItem( Qt::MouseButtons MouseButtons, Qt::KeyboardModifiers KeyboardModifiers )
-		:	mMouseButtons( MouseButtons ), mKeyboardModifiers( KeyboardModifiers )
+	/* Mouse specific camera action profile item constructor */
+	CameraControlsState( const Qt::MouseButtons MouseButtons, const Qt::KeyboardModifiers KeyboardModifiers, const int Key = 0 )
+		:	mMouseButtons( MouseButtons ), mKeyboardModifiers( KeyboardModifiers ), mKey( Key )
 	{}
 
 	Qt::MouseButtons 		mMouseButtons;
 	Qt::KeyboardModifiers	mKeyboardModifiers;
+	int mKey;
 };
 
-struct CameraActionProfileItemCompare
+class CameraControlsStateCompare
 {
-	bool operator()( const CameraActionProfileItem & lhs, const CameraActionProfileItem & rhs ) const
+public:
+
+	/*
+	 * The comparison method must provide strict weak ordering (https://en.wikipedia.org/wiki/Weak_ordering#Strict_weak_orderings)
+	 * https://stackoverflow.com/a/24689122/5677080
+	 */
+	bool operator()( const CameraControlsState & lhs, const CameraControlsState & rhs ) const
 	{
+#if true
 		if( lhs.mMouseButtons < rhs.mMouseButtons )
 		{
 			return( true );
 		}
 		else if( lhs.mMouseButtons == rhs.mMouseButtons )
 		{
-			return( lhs.mKeyboardModifiers < rhs.mKeyboardModifiers );
+			if( lhs.mKeyboardModifiers < rhs.mKeyboardModifiers )
+			{
+				return( true );
+			}
+			else if( lhs.mKeyboardModifiers == rhs.mKeyboardModifiers )
+			{
+				return( lhs.mKey < rhs.mKey );
+			}
+			else
+			{
+				return( false );
+			}
 		}
 		else
 		{
 			return( false );
 		}
+#else
+		return( this->compare( std::pair<Qt::MouseButtons, Qt::MouseButtons>( lhs.mMouseButtons, rhs.mMouseButtons ), std::pair<Qt::KeyboardModifiers, Qt::KeyboardModifiers>( lhs.mKeyboardModifiers, rhs.mKeyboardModifiers ) ) );
+#endif
+	}
+
+private:
+
+	/*
+	 * The comparison method must provide strict weak ordering (https://en.wikipedia.org/wiki/Weak_ordering#Strict_weak_orderings)
+	 * https://stackoverflow.com/a/24689122/5677080
+	 */
+
+	template<typename T>
+	bool compare( const std::pair<T, T> Pair ) const
+	{
+		return( Pair.first < Pair.second );
+	}
+
+	template<typename T, typename ... OTHER_PAIRS>
+	bool compare( const std::pair<T, T> Pair, OTHER_PAIRS... Others ) const
+	{
+		return( ( Pair.first < Pair.second ) ? true : compare( Others... ) );
 	}
 };
 
 class CameraControlProfile
 {
 public:
-	/* TODO: getAction shall accept the event directly - even if QMouseEvent or QWheelEvent */
-	CameraAction getAction( Qt::MouseButtons MouseButtons, Qt::KeyboardModifiers KeyboardModifiers )
+	CameraAction getAction( const CameraControlsState * ControlsState )
 	{
+		/* TODO: Remove, temporary debug prints */
+#if DEBUG_CONSOLE_OUTPUT
+		std::cout << "Camera control action detected. Searching appropriate action..." << std::endl;
+
+		std::cout << "Key(s) = " << ControlsState->mKey << std::endl;
+		std::cout << "Modifier(s) = " << ControlsState->mKeyboardModifiers << std::endl;
+		std::cout << "Mouse button(s) = " << ControlsState->mMouseButtons << std::endl;
+#endif
+
 		CameraAction tAction = CameraAction::NOTHING;
-		CameraActionProfileItem tItem ( MouseButtons, KeyboardModifiers );
 
 		/* Try to search for the desired mouse buttons and modifiers combination */
 		/* Once the find() method is equal to the iterator returned by end(), it means the buttons/modifiers combination was not found
 		 * in the mapping and thus is being ignored. */
-		if( !( this->mActionMapping.find( tItem ) == this->mActionMapping.end() ) )
+		if( !( this->mActionMapping.find( (* ControlsState) ) == this->mActionMapping.end() ) )
 		{
 			/* Mouse buttons / modifiers combination found in the action mapping. Get the assigned action */
-			tAction = this->mActionMapping.at( tItem );
+			tAction = this->mActionMapping.at( (* ControlsState) );
 		}
 
 		return( tAction );
@@ -88,7 +134,7 @@ protected:
 
 	virtual ~CameraControlProfile( void ) = default;
 
-	std::map<CameraActionProfileItem, CameraAction, CameraActionProfileItemCompare> mActionMapping;
+	std::map<CameraControlsState, CameraAction, CameraControlsStateCompare> mActionMapping;
 
 private:
 
@@ -100,12 +146,13 @@ class CADNavigationProfile
 public:
 	CADNavigationProfile( void )
 	{
-		using TCameraActionProfileItemPair = std::pair<CameraActionProfileItem, CameraAction>;
+		using TCameraControlsStatePair = std::pair<CameraControlsState, CameraAction>;
 
-		this->mActionMapping.insert( TCameraActionProfileItemPair( CameraActionProfileItem( Qt::RightButton, Qt::NoModifier ), CameraAction::ORBIT ) );
-		this->mActionMapping.insert( TCameraActionProfileItemPair( CameraActionProfileItem( Qt::LeftButton, Qt::NoModifier ), CameraAction::SELECTION ) );
-		this->mActionMapping.insert( TCameraActionProfileItemPair( CameraActionProfileItem( Qt::MiddleButton, Qt::NoModifier ), CameraAction::PANNING ) );
-		this->mActionMapping.insert( TCameraActionProfileItemPair( CameraActionProfileItem( Qt::RightButton, Qt::ControlModifier ), CameraAction::FREELOOK ) );
+		this->mActionMapping.insert( TCameraControlsStatePair( CameraControlsState( Qt::RightButton, Qt::NoModifier ), CameraAction::ORBIT ) );
+		this->mActionMapping.insert( TCameraControlsStatePair( CameraControlsState( Qt::LeftButton, Qt::NoModifier ), CameraAction::SELECTION ) );
+		this->mActionMapping.insert( TCameraControlsStatePair( CameraControlsState( Qt::MiddleButton, Qt::NoModifier ), CameraAction::PANNING ) );
+		this->mActionMapping.insert( TCameraControlsStatePair( CameraControlsState( Qt::RightButton, Qt::ControlModifier ), CameraAction::FREELOOK ) );
+		this->mActionMapping.insert( TCameraControlsStatePair( CameraControlsState( Qt::NoButton, Qt::ControlModifier, Qt::Key_P ), CameraAction::PANNING ) );
 	}
 };
 

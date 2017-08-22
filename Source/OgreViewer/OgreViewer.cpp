@@ -57,6 +57,8 @@ OgreViewer::OgreViewer( const std::weak_ptr<QWidget> Parent )
 		mWorkspace( NULL ),
 		/* Default camera action is to do nothing */
 		mCameraAction( CameraAction::NOTHING ),
+		/* Current camera control state */
+		mCurrentCameraControlsState( new CameraControlsState( Qt::NoButton, Qt::NoModifier, 0 ) ),
 		/* Create camera control profile to implement camera action to mouse buttons and its modifiers mapping */
 		mCameraControlProfile( new CADNavigationProfile() ),
 		mTarget( NULL ),
@@ -250,18 +252,26 @@ void OgreViewer::setCameraAction( CameraAction Action )
 
 void OgreViewer::keyPressEvent( QKeyEvent * Event )
 {
+	this->mCurrentCameraControlsState->mKey = Event->key();
 
+	this->setCameraAction( this->mCameraControlProfile->getAction( this->mCurrentCameraControlsState ) );
 }
 
 void OgreViewer::keyReleaseEvent( QKeyEvent * Event )
 {
+	/* Once the key is released, no key is logically pressed */
+	this->mCurrentCameraControlsState->mKey = 0;
 
+	/* Camera action setup makes sense even if the key is released as there might be valid combination
+	 * of controls after the key release. */
+	this->setCameraAction( this->mCameraControlProfile->getAction( this->mCurrentCameraControlsState ) );
 }
 
 void OgreViewer::mousePressEvent( QMouseEvent * Event )
 {
-	/* If current button state and keyboard modifiers fits to any action, select it */
-	this->setCameraAction( this->mCameraControlProfile->getAction( Event->buttons(), Event->modifiers() ) );
+	this->mCurrentCameraControlsState->mMouseButtons = Event->buttons();
+
+	this->setCameraAction( this->mCameraControlProfile->getAction( this->mCurrentCameraControlsState ) );
 
 	/* TODO: Remove, temporary debug prints */
 #if DEBUG_CONSOLE_OUTPUT
@@ -285,12 +295,9 @@ void OgreViewer::mouseReleaseEvent( QMouseEvent * Event )
 		this->selection( Event );
 	}
 
-	/* Once the mouse buttons are released, the camera should not perform any action */
-	this->mCameraAction = CameraAction::NOTHING;
+	this->mCurrentCameraControlsState->mMouseButtons = Event->buttons();
 
-#if DEBUG_CONSOLE_OUTPUT
-		std::cout << "CameraAction = NOTHING" << std::endl;
-#endif
+	this->setCameraAction( this->mCameraControlProfile->getAction( this->mCurrentCameraControlsState ) );
 }
 
 void OgreViewer::mouseMoveEvent( QMouseEvent * Event )
@@ -314,6 +321,10 @@ void OgreViewer::mouseMoveEvent( QMouseEvent * Event )
 /* TODO: Make the wheelEvent configurable as well. It must not serve for zooming only */
 void OgreViewer::wheelEvent( QWheelEvent * Event )
 {
+#if false
+	this->setCameraAction( this->mCameraControlProfile->getAction( this->mCurrentCameraControlsState ) );
+#endif
+
 	this->cameraZoom( Event->delta() );
 }
 
