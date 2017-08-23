@@ -113,6 +113,8 @@ protected:
 
 	void cameraZoom( const int RelZ );
 
+	void cameraPan( const int RelX, const int RelY );
+
 	/**
 	 * @brief frameRenderingQueued (Overrides Ogre::FrameListener::frameRenderingQueued via Ogre::FrameListener)
 	 */
@@ -135,6 +137,7 @@ private:
 	CameraAction					mCameraAction;
 	CameraControlsState	*			mCurrentCameraControlsState;
 	CameraControlProfile * 			mCameraControlProfile;
+	Ogre::SceneNode	*				mDefaultTarget;
 	Ogre::SceneNode * 				mTarget;
 
 	bool mUpdatePending;

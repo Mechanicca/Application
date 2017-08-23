@@ -27,15 +27,30 @@ enum class CameraAction : unsigned short
 	ZOOM
 };
 
+enum class ControlsAction : unsigned short
+{
+	NOTHING,
+	MOUSE_MOVE,
+	MOUSE_WHEEL,
+	MOUSE_BUTTON_PRESSED,
+	MOUSE_BUTTON_RELEASED,
+	KEY_PRESSED,
+	KEY_RELEASED
+};
 
 class CameraControlsState
 {
 public:
 	/* Mouse specific camera action profile item constructor */
-	CameraControlsState( const Qt::MouseButtons MouseButtons, const Qt::KeyboardModifiers KeyboardModifiers, const int Key = 0 )
-		:	mMouseButtons( MouseButtons ), mKeyboardModifiers( KeyboardModifiers ), mKey( Key )
+	CameraControlsState( const ControlsAction controlsAction, const Qt::MouseButtons mouseButtons, const Qt::KeyboardModifiers keyboardModifiers, const int key = 0 )
+		:	mControlsAction( controlsAction ), mMouseButtons( mouseButtons ), mKeyboardModifiers( keyboardModifiers ), mKey( key )
 	{}
 
+	CameraControlsState( void )
+		:	mControlsAction( ControlsAction::NOTHING ), mMouseButtons( Qt::NoButton ), mKeyboardModifiers( Qt::NoModifier ), mKey( 0 )
+	{}
+
+	ControlsAction			mControlsAction;
 	Qt::MouseButtons 		mMouseButtons;
 	Qt::KeyboardModifiers	mKeyboardModifiers;
 	int mKey;
@@ -51,33 +66,12 @@ public:
 	 */
 	bool operator()( const CameraControlsState & lhs, const CameraControlsState & rhs ) const
 	{
-#if true
-		if( lhs.mMouseButtons < rhs.mMouseButtons )
-		{
-			return( true );
-		}
-		else if( lhs.mMouseButtons == rhs.mMouseButtons )
-		{
-			if( lhs.mKeyboardModifiers < rhs.mKeyboardModifiers )
-			{
-				return( true );
-			}
-			else if( lhs.mKeyboardModifiers == rhs.mKeyboardModifiers )
-			{
-				return( lhs.mKey < rhs.mKey );
-			}
-			else
-			{
-				return( false );
-			}
-		}
-		else
-		{
-			return( false );
-		}
-#else
-		return( this->compare( std::pair<Qt::MouseButtons, Qt::MouseButtons>( lhs.mMouseButtons, rhs.mMouseButtons ), std::pair<Qt::KeyboardModifiers, Qt::KeyboardModifiers>( lhs.mKeyboardModifiers, rhs.mKeyboardModifiers ) ) );
-#endif
+		return( this->compare(
+					std::pair<ControlsAction, ControlsAction>( lhs.mControlsAction, rhs.mControlsAction ),
+					std::pair<Qt::MouseButtons, Qt::MouseButtons>( lhs.mMouseButtons, rhs.mMouseButtons ),
+					std::pair<Qt::KeyboardModifiers, Qt::KeyboardModifiers>( lhs.mKeyboardModifiers, rhs.mKeyboardModifiers ),
+					std::pair<int, int>( lhs.mKey, rhs.mKey ) )
+				);
 	}
 
 private:
@@ -96,24 +90,16 @@ private:
 	template<typename T, typename ... OTHER_PAIRS>
 	bool compare( const std::pair<T, T> Pair, OTHER_PAIRS... Others ) const
 	{
-		return( ( Pair.first < Pair.second ) ? true : compare( Others... ) );
+		/* If both pair items are equal, evaluate next pair in Others. If first element is lower than second, return true, false otherwise. */
+		return( ( Pair.first == Pair.second ) ? compare( Others... ) : ( Pair.first < Pair.second ) ? true : false );
 	}
 };
 
 class CameraControlProfile
 {
 public:
-	CameraAction getAction( const CameraControlsState * ControlsState )
+	CameraAction getAction( const CameraControlsState * ControlsState ) const
 	{
-		/* TODO: Remove, temporary debug prints */
-#if DEBUG_CONSOLE_OUTPUT
-		std::cout << "Camera control action detected. Searching appropriate action..." << std::endl;
-
-		std::cout << "Key(s) = " << ControlsState->mKey << std::endl;
-		std::cout << "Modifier(s) = " << ControlsState->mKeyboardModifiers << std::endl;
-		std::cout << "Mouse button(s) = " << ControlsState->mMouseButtons << std::endl;
-#endif
-
 		CameraAction tAction = CameraAction::NOTHING;
 
 		/* Try to search for the desired mouse buttons and modifiers combination */
@@ -134,10 +120,16 @@ protected:
 
 	virtual ~CameraControlProfile( void ) = default;
 
-	std::map<CameraControlsState, CameraAction, CameraControlsStateCompare> mActionMapping;
+	void add( const CameraAction cameraAction, const ControlsAction controlsAction, const Qt::MouseButtons mouseButtons, const Qt::KeyboardModifiers keyboardModifiers, const int Key = 0 )
+	{
+		using TCameraControlsStatePair = std::pair<CameraControlsState, CameraAction>;
+
+		this->mActionMapping.insert( TCameraControlsStatePair( CameraControlsState( controlsAction, mouseButtons, keyboardModifiers, Key ), cameraAction ) );
+	}
 
 private:
 
+	std::map<CameraControlsState, CameraAction, CameraControlsStateCompare> mActionMapping;
 };
 
 class CADNavigationProfile
@@ -146,13 +138,11 @@ class CADNavigationProfile
 public:
 	CADNavigationProfile( void )
 	{
-		using TCameraControlsStatePair = std::pair<CameraControlsState, CameraAction>;
-
-		this->mActionMapping.insert( TCameraControlsStatePair( CameraControlsState( Qt::RightButton, Qt::NoModifier ), CameraAction::ORBIT ) );
-		this->mActionMapping.insert( TCameraControlsStatePair( CameraControlsState( Qt::LeftButton, Qt::NoModifier ), CameraAction::SELECTION ) );
-		this->mActionMapping.insert( TCameraControlsStatePair( CameraControlsState( Qt::MiddleButton, Qt::NoModifier ), CameraAction::PANNING ) );
-		this->mActionMapping.insert( TCameraControlsStatePair( CameraControlsState( Qt::RightButton, Qt::ControlModifier ), CameraAction::FREELOOK ) );
-		this->mActionMapping.insert( TCameraControlsStatePair( CameraControlsState( Qt::NoButton, Qt::ControlModifier, Qt::Key_P ), CameraAction::PANNING ) );
+		this->add( CameraAction::SELECTION, ControlsAction::MOUSE_BUTTON_RELEASED, Qt::LeftButton, Qt::NoModifier );
+		this->add( CameraAction::ORBIT, ControlsAction::MOUSE_MOVE, Qt::RightButton, Qt::NoModifier );
+		this->add( CameraAction::PANNING, ControlsAction::MOUSE_MOVE, Qt::MiddleButton, Qt::NoModifier );
+		this->add( CameraAction::FREELOOK, ControlsAction::MOUSE_MOVE, Qt::RightButton, Qt::NoModifier, Qt::Key_F );
+		this->add( CameraAction::ZOOM, ControlsAction::MOUSE_WHEEL, Qt::NoButton, Qt::NoModifier, Qt::Key_Z );
 	}
 };
 

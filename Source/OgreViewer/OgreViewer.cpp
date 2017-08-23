@@ -50,18 +50,19 @@ OgreViewer::OgreViewer( const std::weak_ptr<QWidget> Parent )
 #else
 	:	QWindow(),
 #endif
-		mRoot( NULL ),
-		mRenderWindow( NULL ),
-		mSceneManager( NULL ),
-		mCamera( NULL ),
-		mWorkspace( NULL ),
+		mRoot( nullptr ),
+		mRenderWindow( nullptr ),
+		mSceneManager( nullptr ),
+		mCamera( nullptr ),
+		mWorkspace( nullptr ),
 		/* Default camera action is to do nothing */
 		mCameraAction( CameraAction::NOTHING ),
 		/* Current camera control state */
-		mCurrentCameraControlsState( new CameraControlsState( Qt::NoButton, Qt::NoModifier, 0 ) ),
+		mCurrentCameraControlsState( new CameraControlsState() ),
 		/* Create camera control profile to implement camera action to mouse buttons and its modifiers mapping */
 		mCameraControlProfile( new CADNavigationProfile() ),
-		mTarget( NULL ),
+		mDefaultTarget( nullptr ),
+		mTarget( nullptr ),
 		mUpdatePending( false )
 {
 	if( !Parent.expired() )
@@ -87,8 +88,10 @@ OgreViewer::OgreViewer( const std::weak_ptr<QWidget> Parent )
 	/* Create Camera */
 	this->mCamera = createCamera( this->mSceneManager );
 
+	this->mDefaultTarget = this->mSceneManager->getRootSceneNode();
+
 	/* Setup viewer target */
-	this->setTarget( this->mSceneManager->getRootSceneNode() );
+	this->setTarget( this->mDefaultTarget );
 
 	/* Initialize High Level Material System */
 	this->initializeHlms();
@@ -237,7 +240,7 @@ void OgreViewer::setCameraAction( CameraAction Action )
 	/* Set the camera specific to requested Action */
 	if( ( this->mCameraAction != CameraAction::ORBIT ) && ( Action == CameraAction::ORBIT ) )
 	{
-		this->setTarget( ( this->mTarget ) ? this->mTarget : this->mCamera->getSceneManager()->getRootSceneNode() );
+		this->setTarget( ( this->mTarget ) ? this->mTarget : this->mDefaultTarget );
 		this->mCamera->setFixedYawAxis( true );
 	}
 	else if( ( this->mCameraAction != CameraAction::FREELOOK ) && ( Action == CameraAction::FREELOOK ) )
@@ -248,6 +251,20 @@ void OgreViewer::setCameraAction( CameraAction Action )
 
 	/* Finally, select the camera action */
 	this->mCameraAction = Action;
+
+
+	/* TODO: Remove, temporary debug prints */
+#if DEBUG_CONSOLE_OUTPUT
+	switch( this->mCameraAction )
+	{
+		case CameraAction::NOTHING : std::cout << "CameraAction = NOTHING" << std::endl; break;
+		case CameraAction::SELECTION : std::cout << "CameraAction = SELECTION" << std::endl; break;
+		case CameraAction::FREELOOK : std::cout << "CameraAction = FREELOOK" << std::endl; break;
+		case CameraAction::ORBIT : std::cout << "CameraAction = ORBIT" << std::endl; break;
+		case CameraAction::PANNING : std::cout << "CameraAction = PANNING" << std::endl; break;
+		case CameraAction::ZOOM : std::cout << "CameraAction = ZOOM" << std::endl; break;
+	}
+#endif
 }
 
 void OgreViewer::keyPressEvent( QKeyEvent * Event )
@@ -272,19 +289,6 @@ void OgreViewer::mousePressEvent( QMouseEvent * Event )
 	this->mCurrentCameraControlsState->mMouseButtons = Event->buttons();
 
 	this->setCameraAction( this->mCameraControlProfile->getAction( this->mCurrentCameraControlsState ) );
-
-	/* TODO: Remove, temporary debug prints */
-#if DEBUG_CONSOLE_OUTPUT
-	switch( this->mCameraAction )
-	{
-		case CameraAction::NOTHING : std::cout << "CameraAction = NOTHING" << std::endl; break;
-		case CameraAction::SELECTION : std::cout << "CameraAction = SELECTION" << std::endl; break;
-		case CameraAction::FREELOOK : std::cout << "CameraAction = FREELOOK" << std::endl; break;
-		case CameraAction::ORBIT : std::cout << "CameraAction = ORBIT" << std::endl; break;
-		case CameraAction::PANNING : std::cout << "CameraAction = PANNING" << std::endl; break;
-		case CameraAction::ZOOM : std::cout << "CameraAction = ZOOM" << std::endl; break;
-	}
-#endif
 }
 
 void OgreViewer::mouseReleaseEvent( QMouseEvent * Event )
@@ -314,6 +318,7 @@ void OgreViewer::mouseMoveEvent( QMouseEvent * Event )
 		case CameraAction::ORBIT : 		this->cameraOrbit( relX, relY ); break;
 		case CameraAction::FREELOOK : 	this->cameraFreelook( relX, relY ); break;
 		case CameraAction::ZOOM :		this->cameraZoom( - relY ); break;
+		case CameraAction::PANNING :	this->cameraPan( relX, relY ); break;
 		default : break;
 	}
 }
@@ -325,7 +330,11 @@ void OgreViewer::wheelEvent( QWheelEvent * Event )
 	this->setCameraAction( this->mCameraControlProfile->getAction( this->mCurrentCameraControlsState ) );
 #endif
 
-	this->cameraZoom( Event->delta() );
+	switch( this->mCameraAction )
+	{
+		case CameraAction::ZOOM : 	this->cameraZoom( Event->delta() ); break;
+		default : break;
+	}
 }
 
 bool OgreViewer::eventFilter( QObject * Target, QEvent * Event )
@@ -371,20 +380,33 @@ bool OgreViewer::event( QEvent * Event )
 
 void OgreViewer::setTarget( Ogre::SceneNode * Target )
 {
-	if( Target != this->mTarget )
+	/* If Target is a valid pointer to Ogre::SceneNode to look at */
+	if( Target )
 	{
-		this->mTarget = Target;
-
-		if( Target != NULL )
+		/* If mTarget is not valid - means not yet set */
+		if( !( this->mTarget ) )
 		{
-			/* TODO: Replace hard coded values here. */
-			this->setCameraYawPitchDistance( Ogre::Degree( 0 ), Ogre::Degree( 15 ), 15 );
-			this->mCamera->setAutoTracking( true, this->mTarget );
+			/* Set the Target */
+			this->mTarget = Target;
 		}
+		/* mTarget is already set valid */
 		else
 		{
-			this->mCamera->setAutoTracking( false );
+			/* New target is different to the one already set */
+			if( Target != this->mTarget )
+			{
+				this->mTarget = Target;
+
+				/* TODO: Replace hard coded values here. */
+				this->setCameraYawPitchDistance( Ogre::Degree( 0 ), Ogre::Degree( 15 ), 15 );
+
+				this->mCamera->setAutoTracking( true, this->mTarget );
+			}
 		}
+	}
+	else
+	{
+		this->mCamera->setAutoTracking( false );
 	}
 }
 
@@ -455,6 +477,12 @@ void OgreViewer::cameraZoom( const int RelZ )
 		/* TODO: Rework hard-coded values */
 		mCamera->moveRelative( Ogre::Vector3( 0, 0, -RelZ * 0.0008f * tDistance ) );
 	}
+}
+
+void OgreViewer::cameraPan( const int RelX, const int RelY )
+{
+	/* TODO: Rework hard-coded values */
+	this->mCamera->moveRelative( Ogre::Vector3( - RelX * 0.025, RelY  * 0.025, 0.0f ) );
 }
 
 bool OgreViewer::frameRenderingQueued(const Ogre::FrameEvent & Event)
