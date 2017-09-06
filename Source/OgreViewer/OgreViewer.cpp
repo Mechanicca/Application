@@ -142,7 +142,6 @@ Ogre::RenderWindow * OgreViewer::createRenderWindow( Ogre::Root * Root, QSize Di
 	tParameters["externalWindowHandle"] = Ogre::StringConverter::toString( (unsigned long)( WinID ) );
 	tParameters["parentWindowHandle"] =	Ogre::StringConverter::toString( (unsigned long)( WinID ) );
 
-	/* FIXME: unsure but has an effect on background. */
 	tParameters.insert( std::make_pair("gamma", "true") );
 
 	return( Root->createRenderWindow("QT Window", Dimensions.width(), Dimensions.height(), false, &tParameters ) );
@@ -200,7 +199,6 @@ void OgreViewer::initializeHlms( void )
 	library.push_back( ArchivePbsLibraryAny );
 	library.push_back( ArchiveUnlitLibraryAny );
 
-
 	Ogre::HlmsPbs * hlmsPbs = OGRE_NEW Ogre::HlmsPbs( ArchivePbs, &library );
 	Ogre::HlmsUnlit * hlmsUnlit = OGRE_NEW Ogre::HlmsUnlit( ArchiveUnlit, &library );
 
@@ -212,26 +210,27 @@ void OgreViewer::configureResources( const Ogre::String ResourcesFileName ) cons
 {
 	Ogre::ConfigFile tResourcesConfigFile;
 
+	/* Load resource configuration file */
 	tResourcesConfigFile.load( ResourcesFileName );
 
 	Ogre::ConfigFile::SectionIterator tSectionIterator = tResourcesConfigFile.getSectionIterator();
 	Ogre::String tSectionName, tTypeName, tArchiveName;
 
+	/* Iterate through all the sections of resources file */
 	while( tSectionIterator.hasMoreElements() )
 	{
+		/* Get section name */
 		tSectionName = tSectionIterator.peekNextKey();
 
-		Ogre::ConfigFile::SettingsMultiMap * tSettings = tSectionIterator.getNext();
-		Ogre::ConfigFile::SettingsMultiMap::iterator i;
-		for (i = tSettings->begin(); i != tSettings->end(); ++i)
+		/* Iterate through all the resources in section */
+		for( const std::pair<const std::string, std::string> & ResourceItem : (* tSectionIterator.getNext() ) )
 		{
-			tTypeName = i->first;
-			tArchiveName = i->second;
-			Ogre::ResourceGroupManager::getSingleton().addResourceLocation( tArchiveName, tTypeName, tSectionName );
+			/* Add resource location to resource group manager */
+			Ogre::ResourceGroupManager::getSingleton().addResourceLocation( ResourceItem.second, ResourceItem.first, tSectionName );
 		}
 	}
 
-	/* TODO: 'true' reason is not known */
+	/* Initialise, parse scripts, etc. */
 	Ogre::ResourceGroupManager::getSingleton().initialiseAllResourceGroups( true );
 }
 
@@ -252,7 +251,6 @@ void OgreViewer::setCameraAction( CameraAction Action )
 	/* Finally, select the camera action */
 	this->mCameraAction = Action;
 
-
 	/* TODO: Remove, temporary debug prints */
 #if DEBUG_CONSOLE_OUTPUT
 	switch( this->mCameraAction )
@@ -267,74 +265,98 @@ void OgreViewer::setCameraAction( CameraAction Action )
 #endif
 }
 
+void OgreViewer::doCameraAction( CameraAction Action, QPoint Coordinates)
+{
+	/* Once the required action is different to the one already selected... */
+	if( Action != this->mCameraAction )
+	{
+		/* ...set the new action */
+		this->setCameraAction( Action );
+	}
+
+	/* Switch current camera action requested */
+	switch( this->mCameraAction )
+	{
+		case CameraAction::SELECTION : 	this->selection( Coordinates ); break;
+		case CameraAction::ORBIT : 		this->cameraOrbit( Coordinates ); break;
+		case CameraAction::FREELOOK : 	this->cameraFreelook( Coordinates ); break;
+		case CameraAction::ZOOM :		this->cameraZoom( Coordinates ); break;
+		case CameraAction::PANNING :	this->cameraPan( Coordinates ); break;
+		default : break;
+	}
+}
+
 void OgreViewer::keyPressEvent( QKeyEvent * Event )
 {
+	/* Identify the event which happened */
+	this->mCurrentCameraControlsState->mControlsAction = ControlsAction::KEY_PRESSED;
+
+	/* Save the key being pressed */
 	this->mCurrentCameraControlsState->mKey = Event->key();
 
-	this->setCameraAction( this->mCameraControlProfile->getAction( this->mCurrentCameraControlsState ) );
+	/* Get the associated action to be executed and do it. Location coordinates are worthless in this event. */
+	this->doCameraAction( this->mCameraControlProfile->getAction( this->mCurrentCameraControlsState ), QPoint() );
 }
 
 void OgreViewer::keyReleaseEvent( QKeyEvent * Event )
 {
-	/* Once the key is released, no key is logically pressed */
-	this->mCurrentCameraControlsState->mKey = 0;
+	/* Identify the event which happened */
+	this->mCurrentCameraControlsState->mControlsAction = ControlsAction::KEY_RELEASED;
 
-	/* Camera action setup makes sense even if the key is released as there might be valid combination
-	 * of controls after the key release. */
-	this->setCameraAction( this->mCameraControlProfile->getAction( this->mCurrentCameraControlsState ) );
+	/* Get the associated action to be executed and do it. Location coordinates are worthless in this event. */
+	this->doCameraAction( this->mCameraControlProfile->getAction( this->mCurrentCameraControlsState ), QPoint() );
+
+	/* Once the key is released, no key is logically pressed. This must be done at the end of this method otherwise
+	 * the information which key was released would be lost. */
+	this->mCurrentCameraControlsState->mKey = 0;
 }
 
 void OgreViewer::mousePressEvent( QMouseEvent * Event )
 {
+	/* Identify the event which happened */
+	this->mCurrentCameraControlsState->mControlsAction = ControlsAction::MOUSE_BUTTON_PRESSED;
+
+	/* Save mouse buttons being pressed */
 	this->mCurrentCameraControlsState->mMouseButtons = Event->buttons();
 
-	this->setCameraAction( this->mCameraControlProfile->getAction( this->mCurrentCameraControlsState ) );
+	/* Get the associated action to be executed and do it. Forward the coordinates where the mouse event happened */
+	this->doCameraAction( this->mCameraControlProfile->getAction( this->mCurrentCameraControlsState ), Event->pos() );
 }
 
 void OgreViewer::mouseReleaseEvent( QMouseEvent * Event )
 {
-	/* Once the selection action button / modifiers combination is released, perform the selection itself */
-	if( this->mCameraAction == CameraAction::SELECTION )
-	{
-		this->selection( Event );
-	}
+	/* Identify the event which happened */
+	this->mCurrentCameraControlsState->mControlsAction = ControlsAction::MOUSE_BUTTON_RELEASED;
 
+	/* Get the associated action to be executed and do it. Forward the coordinates where the mouse event happened */
+	this->doCameraAction( this->mCameraControlProfile->getAction( this->mCurrentCameraControlsState ), Event->pos() );
+
+	/* Save current mouse buttons being pressed (if any). This must be done at the end of this method otherwise
+	 * the information which button(s) was/were released would be lost. */
 	this->mCurrentCameraControlsState->mMouseButtons = Event->buttons();
-
-	this->setCameraAction( this->mCameraControlProfile->getAction( this->mCurrentCameraControlsState ) );
 }
 
 void OgreViewer::mouseMoveEvent( QMouseEvent * Event )
 {
-	static int lastX = Event->x();
-	static int lastY = Event->y();
-	int relX = Event->x() - lastX;
-	int relY = Event->y() - lastY;
-	lastX = Event->x();
-	lastY = Event->y();
+	/* Remember last position */
+	static QPoint LastPosition = Event->pos();
 
-	switch( this->mCameraAction )
-	{
-		case CameraAction::ORBIT : 		this->cameraOrbit( relX, relY ); break;
-		case CameraAction::FREELOOK : 	this->cameraFreelook( relX, relY ); break;
-		case CameraAction::ZOOM :		this->cameraZoom( - relY ); break;
-		case CameraAction::PANNING :	this->cameraPan( relX, relY ); break;
-		default : break;
-	}
+	/* Identify the event which happened */
+	this->mCurrentCameraControlsState->mControlsAction = ControlsAction::MOUSE_MOVE;
+
+	/* Get the associated action to be executed and do it. Forward the delta position coordinates */
+	this->doCameraAction( this->mCameraControlProfile->getAction( this->mCurrentCameraControlsState ), ( Event->pos() - LastPosition ) );
+
+	/* Update mouse event position for next method call */
+	LastPosition = Event->pos();
 }
 
-/* TODO: Make the wheelEvent configurable as well. It must not serve for zooming only */
 void OgreViewer::wheelEvent( QWheelEvent * Event )
 {
-#if false
-	this->setCameraAction( this->mCameraControlProfile->getAction( this->mCurrentCameraControlsState ) );
-#endif
+	this->mCurrentCameraControlsState->mControlsAction = ControlsAction::MOUSE_WHEEL;
 
-	switch( this->mCameraAction )
-	{
-		case CameraAction::ZOOM : 	this->cameraZoom( Event->delta() ); break;
-		default : break;
-	}
+	/* Get the associated action to be executed and do it. Forward the delta position coordinates */
+	this->doCameraAction( this->mCameraControlProfile->getAction( this->mCurrentCameraControlsState ), QPoint( 0, Event->delta() ) );
 }
 
 bool OgreViewer::eventFilter( QObject * Target, QEvent * Event )
@@ -419,11 +441,9 @@ void OgreViewer::setCameraYawPitchDistance( Ogre::Radian Yaw, Ogre::Radian Pitch
 	this->mCamera->moveRelative( Ogre::Vector3( 0, 0, Distance ) );
 }
 
-void OgreViewer::selection( QMouseEvent * Event )
+void OgreViewer::selection( QPoint Coordinates )
 {
-	QPoint Position = Event->pos();
-
-	Ogre::Ray tMouseRay = this->mCamera->getCameraToViewportRay( (Ogre::Real)Position.x() / this->mRenderWindow->getWidth(), (Ogre::Real)Position.y() / this->mRenderWindow->getHeight()	);
+	Ogre::Ray tMouseRay = this->mCamera->getCameraToViewportRay( (Ogre::Real)Coordinates.x() / this->mRenderWindow->getWidth(), (Ogre::Real)Coordinates.y() / this->mRenderWindow->getHeight()	);
 
 	Ogre::RaySceneQuery * tSceneQuery = this->mSceneManager->createRayQuery( tMouseRay );
 	tSceneQuery->setSortByDistance( true );
@@ -440,8 +460,7 @@ void OgreViewer::selection( QMouseEvent * Event )
 			{
 				std::cout << "Entity selected." << std::endl;
 
-				/* TODO: Use static cast instead of explicit conversion */
-				emit entitySelected( ( Ogre::Item * ) tQueryResult[ui].movable );
+				emit entitySelected( static_cast<Ogre::Item *>( tQueryResult[ui].movable ) );
 			}
 		}
 	}
@@ -449,40 +468,40 @@ void OgreViewer::selection( QMouseEvent * Event )
 	this->mSceneManager->destroyQuery( tSceneQuery );
 }
 
-void OgreViewer::cameraOrbit( const int RelX, const int RelY )
+void OgreViewer::cameraOrbit( QPoint Coordinates )
 {
 	Ogre::Real tDistance = ( this->mCamera->getPosition() - this->mTarget->_getDerivedPosition() ).length();
 
 	this->mCamera->setPosition( this->mTarget->_getDerivedPosition() );
 	/* TODO: Rework hard-coded values */
-	this->mCamera->yaw( Ogre::Degree( -RelX * 0.25f ) );
-	this->mCamera->pitch( Ogre::Degree( -RelY * 0.25f ) );
+	this->mCamera->yaw( Ogre::Degree( - Coordinates.x() * 0.25f ) );
+	this->mCamera->pitch( Ogre::Degree(  - Coordinates.y() * 0.25f ) );
 	this->mCamera->moveRelative( Ogre::Vector3( 0, 0, tDistance ) );
 }
 
-void OgreViewer::cameraFreelook( const int RelX, const int RelY )
+void OgreViewer::cameraFreelook( QPoint Coordinates )
 {
 	/* TODO: Rework hard-coded values */
-	this->mCamera->yaw( Ogre::Degree( -RelX * 0.15f ) );
-	this->mCamera->pitch( Ogre::Degree( -RelY * 0.15f ) );
+	this->mCamera->yaw( Ogre::Degree( - Coordinates.x() * 0.15f ) );
+	this->mCamera->pitch( Ogre::Degree( - Coordinates.y() * 0.15f ) );
 }
 
-void OgreViewer::cameraZoom( const int RelZ )
+void OgreViewer::cameraZoom( QPoint Coordinates )
 {
 	Ogre::Real tDistance = ( this->mCamera->getPosition() - this->mTarget->_getDerivedPosition() ).length();
 
-	if( RelZ != 0 )  // move the camera toward or away from the target
+	if( Coordinates.y() != 0 )  // move the camera toward or away from the target
 	{
 		// the further the camera is, the faster it moves
 		/* TODO: Rework hard-coded values */
-		mCamera->moveRelative( Ogre::Vector3( 0, 0, -RelZ * 0.0008f * tDistance ) );
+		mCamera->moveRelative( Ogre::Vector3( 0, 0, - Coordinates.y() * 0.0008f * tDistance ) );
 	}
 }
 
-void OgreViewer::cameraPan( const int RelX, const int RelY )
+void OgreViewer::cameraPan( QPoint Coordinates )
 {
 	/* TODO: Rework hard-coded values */
-	this->mCamera->moveRelative( Ogre::Vector3( - RelX * 0.025, RelY  * 0.025, 0.0f ) );
+	this->mCamera->moveRelative( Ogre::Vector3( - Coordinates.x() * 0.025, Coordinates.y()  * 0.025, 0.0f ) );
 }
 
 bool OgreViewer::frameRenderingQueued(const Ogre::FrameEvent & Event)

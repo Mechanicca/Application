@@ -14,6 +14,9 @@
 /* Qt5 inclusions */
 #include <QMouseEvent>
 
+/* Project specific inclusions */
+#include "Exception.h"
+
 /** @enum mapper::CameraAction
  *  @brief is a strongly typed enum class representing the camera action selected
  */
@@ -42,7 +45,7 @@ class CameraControlsState
 {
 public:
 	/* Mouse specific camera action profile item constructor */
-	CameraControlsState( const ControlsAction controlsAction, const Qt::MouseButtons mouseButtons, const Qt::KeyboardModifiers keyboardModifiers, const int key = 0 )
+	CameraControlsState( const ControlsAction controlsAction, const Qt::MouseButtons mouseButtons = Qt::NoButton, const Qt::KeyboardModifiers keyboardModifiers = Qt::NoModifier, const int key = 0 )
 		:	mControlsAction( controlsAction ), mMouseButtons( mouseButtons ), mKeyboardModifiers( keyboardModifiers ), mKey( key )
 	{}
 
@@ -59,11 +62,6 @@ public:
 class CameraControlsStateCompare
 {
 public:
-
-	/*
-	 * The comparison method must provide strict weak ordering (https://en.wikipedia.org/wiki/Weak_ordering#Strict_weak_orderings)
-	 * https://stackoverflow.com/a/24689122/5677080
-	 */
 	bool operator()( const CameraControlsState & lhs, const CameraControlsState & rhs ) const
 	{
 		return( this->compare(
@@ -80,7 +78,6 @@ private:
 	 * The comparison method must provide strict weak ordering (https://en.wikipedia.org/wiki/Weak_ordering#Strict_weak_orderings)
 	 * https://stackoverflow.com/a/24689122/5677080
 	 */
-
 	template<typename T>
 	bool compare( const std::pair<T, T> Pair ) const
 	{
@@ -124,7 +121,13 @@ protected:
 	{
 		using TCameraControlsStatePair = std::pair<CameraControlsState, CameraAction>;
 
-		this->mActionMapping.insert( TCameraControlsStatePair( CameraControlsState( controlsAction, mouseButtons, keyboardModifiers, Key ), cameraAction ) );
+		if( !( this->mActionMapping.insert( TCameraControlsStatePair( CameraControlsState( controlsAction, mouseButtons, keyboardModifiers, Key ), cameraAction ) ) ).second )
+		{
+			/* From it's principle, the combination of camera controls (mouse action, mouse buttons, keys...) must be unique.
+			 * So during the intialization (insertion of configuration elements), it is checked wheteher the controls configuration is already used.
+			 * If so, the insertion would lead to duplicity, an exception is thrown. */
+			BOOST_THROW_EXCEPTION( typename Exception::OgreViewer::CameraControlProfileDuplicity() << Core::Exception::Message( "Duplicity found in selected camera control profile." ) );
+		}
 	}
 
 private:
@@ -142,7 +145,7 @@ public:
 		this->add( CameraAction::ORBIT, ControlsAction::MOUSE_MOVE, Qt::RightButton, Qt::NoModifier );
 		this->add( CameraAction::PANNING, ControlsAction::MOUSE_MOVE, Qt::MiddleButton, Qt::NoModifier );
 		this->add( CameraAction::FREELOOK, ControlsAction::MOUSE_MOVE, Qt::RightButton, Qt::NoModifier, Qt::Key_F );
-		this->add( CameraAction::ZOOM, ControlsAction::MOUSE_WHEEL, Qt::NoButton, Qt::NoModifier, Qt::Key_Z );
+		this->add( CameraAction::ZOOM, ControlsAction::MOUSE_WHEEL, Qt::NoButton, Qt::NoModifier );
 	}
 };
 

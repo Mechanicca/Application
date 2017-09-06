@@ -8,9 +8,6 @@
 #ifndef OGREVIEWER_OGREVIEWER_H_
 #define OGREVIEWER_OGREVIEWER_H_
 
-#define CAMERA_CONTROL_INTEGRATED	true
-#define DEBUG_CONSOLE_OUTPUT		true
-
 /* Standard library inclusions */
 #include <memory>
 
@@ -22,6 +19,8 @@
 
 /* Project specific inclusions */
 #include "CameraControlProfile.h"
+
+#define DEBUG_CONSOLE_OUTPUT		false
 
 /* Forward declarations */
 namespace Ogre
@@ -54,7 +53,7 @@ public slots:
 
 signals:
 	/**
-	 * @brief exposeEvent (overrides QObject::eventFilter via QWindow)
+	 * @brief Entity Selection Signal
 	 */
 	void entitySelected( Ogre::Item * Item );
 
@@ -101,24 +100,74 @@ protected:
 	 */
 	virtual bool event( QEvent * Event ) override;
 
+	/**
+	 * @brief Camera Target Selection
+	 *
+	 * Use this method to set the camera target. If an invalid target is about to be set,
+	 * no target is set at all and auto tracking is disabled. Once valid target is set
+	 * auto tracking is enabled.
+	 */
 	void setTarget( Ogre::SceneNode * Target );
 
+	/**
+	 * @brief Camera position setup
+	 *
+	 * Set camera position using Yaw, Pitch and Distance parameters.
+	 */
 	void setCameraYawPitchDistance( Ogre::Radian Yaw, Ogre::Radian Pitch, Ogre::Real Distance );
 
-	void selection( QMouseEvent * Event );
+	/**
+	 * @brief Selection Action
+	 *
+	 * Scene object selection action. Once the user uses the camera controls as configured
+	 * in camera control profile assigned to selection, the coordinates are forwarded.
+	 * If any selectable object is selected, Qt signal is emitted.
+	 *
+	 * @param [in] Coordinates	2D coordinates where the selection has been done
+	 */
+	void selection( QPoint Coordinates );
 
-	void cameraOrbit( const int RelX, const int RelY );
+	/**
+	 * @brief Camera Orbit Action
+	 *
+	 * The camera fixes itself to the target object selected and orbits around using the
+	 * configured controls (configured in camera control profile)
+	 *
+	 * @param [in] Coordinates	2D delta coordinates holding the controls movement (mouse by default)
+	 */
+	void cameraOrbit( QPoint Coordinates );
 
-	void cameraFreelook( const int RelX, const int RelY );
+	/**
+	 * @brief Camera Freelook Action
+	 *
+	 * The camera looks around using the configured controls (configured in camera control profile)
+	 *
+	 * @param [in] Coordinates	2D delta coordinates holding the controls movement (mouse by default)
+	 */
+	void cameraFreelook( QPoint Coordinates );
 
-	void cameraZoom( const int RelZ );
+	/**
+	 * @brief Camera Zoom Action
+	 *
+	 * The camera zoom using the configured controls (configured in camera control profile)
+	 *
+	 * @param [in] Coordinates	2D delta coordinates. X coordinate is not used while Y is expected to
+	 * 							hold the delta controls movement
+	 */
+	void cameraZoom( QPoint Coordinates );
 
-	void cameraPan( const int RelX, const int RelY );
+	/**
+	 * @brief Camera Panning Action
+	 *
+	 * The camera panning using the configured controls (configured in camera control profile)
+	 *
+	 * @param [in] Coordinates	2D delta coordinates holding the controls movement (mouse by default)
+	 */
+	void cameraPan( QPoint Coordinates );
 
 	/**
 	 * @brief frameRenderingQueued (Overrides Ogre::FrameListener::frameRenderingQueued via Ogre::FrameListener)
 	 */
-
 	bool frameRenderingQueued( const Ogre::FrameEvent & Event );
 
 	void render( void );
@@ -127,6 +176,8 @@ protected:
 
 private:
 	void setCameraAction( CameraAction Action );
+
+	void doCameraAction( CameraAction Action, QPoint Coordinates );
 
 	Ogre::Root *					mRoot;
 	Ogre::RenderWindow *			mRenderWindow;
