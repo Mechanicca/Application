@@ -8,9 +8,3 @@ target_sources( ${PROJECT_NAME}
         "${CMAKE_CURRENT_LIST_DIR}/Exception.h"
         "${CMAKE_CURRENT_LIST_DIR}/OgreViewer.cpp"
 )
-
-target_link_libraries( ${PROJECT_NAME} 
-    ${OGRE_LIBRARIES}
-    OgreHlmsUnlit
-    OgreHlmsPbs    
-)
