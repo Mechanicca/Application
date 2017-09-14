@@ -63,6 +63,7 @@ OgreViewer::OgreViewer( const std::weak_ptr<QWidget> Parent )
 		mCameraControlProfile( new CADNavigationProfile() ),
 		mDefaultTarget( nullptr ),
 		mTarget( nullptr ),
+		mDoCameraActionReset( false ),
 		mUpdatePending( false )
 {
 	if( !Parent.expired() )
@@ -247,6 +248,10 @@ void OgreViewer::setCameraAction( CameraAction Action )
 		this->mCamera->setAutoTracking( false );
 		this->mCamera->setFixedYawAxis( true );
 	}
+	else if( (this->mCameraAction != CameraAction::NOTHING) && ( Action == CameraAction::NOTHING ) )
+	{
+		this->mDoCameraActionReset = true;
+	}
 
 	/* Finally, select the camera action */
 	this->mCameraAction = Action;
@@ -277,6 +282,7 @@ void OgreViewer::doCameraAction( CameraAction Action, QPoint Coordinates)
 	/* Switch current camera action requested */
 	switch( this->mCameraAction )
 	{
+		case CameraAction::NOTHING : 	this->resetCameraAction(); break;
 		case CameraAction::SELECTION : 	this->selection( Coordinates ); break;
 		case CameraAction::ORBIT : 		this->cameraOrbit( Coordinates ); break;
 		case CameraAction::FREELOOK : 	this->cameraFreelook( Coordinates ); break;
@@ -441,8 +447,20 @@ void OgreViewer::setCameraYawPitchDistance( Ogre::Radian Yaw, Ogre::Radian Pitch
 	this->mCamera->moveRelative( Ogre::Vector3( 0, 0, Distance ) );
 }
 
-void OgreViewer::selection( QPoint Coordinates )
+inline void OgreViewer::resetCameraAction( void )
 {
+	if( this->mDoCameraActionReset )
+	{
+		this->setCursor( Qt::ArrowCursor );
+
+		this->mDoCameraActionReset = false;
+	}
+}
+
+inline void OgreViewer::selection( QPoint Coordinates )
+{
+	this->setCursor( Qt::ArrowCursor );
+
 	Ogre::Ray tMouseRay = this->mCamera->getCameraToViewportRay( (Ogre::Real)Coordinates.x() / this->mRenderWindow->getWidth(), (Ogre::Real)Coordinates.y() / this->mRenderWindow->getHeight()	);
 
 	Ogre::RaySceneQuery * tSceneQuery = this->mSceneManager->createRayQuery( tMouseRay );
@@ -468,8 +486,10 @@ void OgreViewer::selection( QPoint Coordinates )
 	this->mSceneManager->destroyQuery( tSceneQuery );
 }
 
-void OgreViewer::cameraOrbit( QPoint Coordinates )
+inline void OgreViewer::cameraOrbit( QPoint Coordinates )
 {
+	this->setCursor( Qt::ClosedHandCursor );
+
 	Ogre::Real tDistance = ( this->mCamera->getPosition() - this->mTarget->_getDerivedPosition() ).length();
 
 	this->mCamera->setPosition( this->mTarget->_getDerivedPosition() );
@@ -479,15 +499,19 @@ void OgreViewer::cameraOrbit( QPoint Coordinates )
 	this->mCamera->moveRelative( Ogre::Vector3( 0, 0, tDistance ) );
 }
 
-void OgreViewer::cameraFreelook( QPoint Coordinates )
+inline void OgreViewer::cameraFreelook( QPoint Coordinates )
 {
+	this->setCursor( Qt::ClosedHandCursor );
+
 	/* TODO: Rework hard-coded values */
 	this->mCamera->yaw( Ogre::Degree( - Coordinates.x() * 0.15f ) );
 	this->mCamera->pitch( Ogre::Degree( - Coordinates.y() * 0.15f ) );
 }
 
-void OgreViewer::cameraZoom( QPoint Coordinates )
+inline void OgreViewer::cameraZoom( QPoint Coordinates )
 {
+	this->setCursor( Qt::SizeVerCursor );
+
 	Ogre::Real tDistance = ( this->mCamera->getPosition() - this->mTarget->_getDerivedPosition() ).length();
 
 	if( Coordinates.y() != 0 )  // move the camera toward or away from the target
@@ -498,8 +522,10 @@ void OgreViewer::cameraZoom( QPoint Coordinates )
 	}
 }
 
-void OgreViewer::cameraPan( QPoint Coordinates )
+inline void OgreViewer::cameraPan( QPoint Coordinates )
 {
+	this->setCursor( Qt::SizeAllCursor );
+
 	/* TODO: Rework hard-coded values */
 	this->mCamera->moveRelative( Ogre::Vector3( - Coordinates.x() * 0.025, Coordinates.y()  * 0.025, 0.0f ) );
 }

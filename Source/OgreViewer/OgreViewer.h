@@ -117,6 +117,13 @@ protected:
 	void setCameraYawPitchDistance( Ogre::Radian Yaw, Ogre::Radian Pitch, Ogre::Real Distance );
 
 	/**
+	 * @brief No Camera Action
+	 *
+	 * This method is used to reset all the specific settings of any previous camera action
+	 */
+	inline void resetCameraAction( void );
+
+	/**
 	 * @brief Selection Action
 	 *
 	 * Scene object selection action. Once the user uses the camera controls as configured
@@ -125,7 +132,7 @@ protected:
 	 *
 	 * @param [in] Coordinates	2D coordinates where the selection has been done
 	 */
-	void selection( QPoint Coordinates );
+	inline void selection( QPoint Coordinates );
 
 	/**
 	 * @brief Camera Orbit Action
@@ -135,7 +142,7 @@ protected:
 	 *
 	 * @param [in] Coordinates	2D delta coordinates holding the controls movement (mouse by default)
 	 */
-	void cameraOrbit( QPoint Coordinates );
+	inline void cameraOrbit( QPoint Coordinates );
 
 	/**
 	 * @brief Camera Freelook Action
@@ -144,7 +151,7 @@ protected:
 	 *
 	 * @param [in] Coordinates	2D delta coordinates holding the controls movement (mouse by default)
 	 */
-	void cameraFreelook( QPoint Coordinates );
+	inline void cameraFreelook( QPoint Coordinates );
 
 	/**
 	 * @brief Camera Zoom Action
@@ -154,7 +161,7 @@ protected:
 	 * @param [in] Coordinates	2D delta coordinates. X coordinate is not used while Y is expected to
 	 * 							hold the delta controls movement
 	 */
-	void cameraZoom( QPoint Coordinates );
+	inline void cameraZoom( QPoint Coordinates );
 
 	/**
 	 * @brief Camera Panning Action
@@ -163,7 +170,7 @@ protected:
 	 *
 	 * @param [in] Coordinates	2D delta coordinates holding the controls movement (mouse by default)
 	 */
-	void cameraPan( QPoint Coordinates );
+	inline void cameraPan( QPoint Coordinates );
 
 	/**
 	 * @brief frameRenderingQueued (Overrides Ogre::FrameListener::frameRenderingQueued via Ogre::FrameListener)
@@ -190,6 +197,8 @@ private:
 	CameraControlProfile * 			mCameraControlProfile;
 	Ogre::SceneNode	*				mDefaultTarget;
 	Ogre::SceneNode * 				mTarget;
+
+	bool mDoCameraActionReset;
 
 	bool mUpdatePending;
 };
